@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <cstdio>
 #include <opencv2/opencv.hpp>
 
 // ifstream constructor.
@@ -13,23 +13,7 @@ using namespace std;
 
 void get_z_vector(const Eigen::MatrixXf &grid, Eigen::VectorXf &vec, size_t x_idx, size_t y_idx, size_t step);
 
-int main(int argc, char **argv) {
-//    if ( argc != 2 )
-//    {
-//        printf("usage: DisplayImage.out <Image_Path>\n");
-//        return -1;
-//    }
-//    Mat image;
-//    image = imread( argv[1], 1 );
-//    if ( !image.data )
-//    {
-//        printf("No image data \n");
-//        return -1;
-//    }
-//    namedWindow("Display Image", WINDOW_AUTOSIZE );
-//    imshow("Display Image", image);
-//    waitKey(0);
-
+int main() {
 //    std::ifstream ifs ("output.csv", std::ifstream::in);
 
 //    std::ifstream ifs ("aa.txt", std::ifstream::in);
@@ -44,7 +28,6 @@ int main(int argc, char **argv) {
     cout << "size: x " << x_num << " ,y " << y_num << " ,z " << z_num << endl;
 
     std::string str;
-    std::vector<std::vector<string>> lines;
     Eigen::MatrixXf grid(10800, 160);
     grid.setZero();
     int cnt_line = 0;
@@ -85,17 +68,97 @@ int main(int argc, char **argv) {
 
 //    test_mtx.setRandom();
     cout << "test-Mtx: " << test_mtx << endl;
-    cv::Mat_<float> a(x_num, y_num); // create cv mat object
+    cv::Mat_<float> pc_image(x_num, y_num); // create cv mat object
 
-    eigen2cv(test_mtx, a); // convert eigen matrix to opencv mat
-//    a.convertTo(a,CV_16F);
-    cout << "a type: " << a.depth() << " " << a.channels() << endl;
-//    a.setTo(0.5);
-    cout << "Mat: " << a.rows << " " << a.cols << endl;
+    eigen2cv(test_mtx, pc_image); // convert eigen matrix to opencv mat
+//    pc_image.convertTo(pc_image,CV_8U);
+    cout << "pc_image type: " << pc_image.depth() << " " << pc_image.channels() << endl;
+
+    Mat pc_iamge_grey;
+    pc_image.convertTo(pc_iamge_grey, CV_8U);
+
+    cout << "Mat: " << pc_image.rows << " " << pc_image.cols << endl;
     namedWindow("Display Image", WINDOW_NORMAL);
-    imshow("Display Image", a);
-    waitKey(0);
+    imshow("Display Image", pc_image);
 
+    Mat image_edges;
+    int lowThreshold = 0;
+    const int ratio = 3;
+    const int kernel_size = 3;
+
+    Canny(pc_iamge_grey, image_edges, lowThreshold, lowThreshold * ratio, kernel_size);
+    namedWindow("image_edges Image", WINDOW_NORMAL);
+    imshow("image_edges Image", image_edges);
+
+    vector<Vec3f> HT_v_lines;
+//    vector<Vec4i> HT_v_lines;
+    vector<Vec3f> HT_h_lines; // will hold the results of the detection
+    cout << "num lines: " << HT_v_lines.size() << endl;
+
+    float HT_theta_resolution = 0.1 * CV_PI / 180; // radian
+    float HT_rho_resolution = 0.5f * cell_size; // pixel
+    float min_edge_len = 10.0; // meter
+    int HT_min_thres_x = int(min_edge_len / cell_size);
+    int HT_min_thres_y = 3 * int(min_edge_len / cell_size);
+    Mat cimage_edges;
+    cvtColor(image_edges, cimage_edges, COLOR_GRAY2BGR);
+
+    /** Find vertical lines*/
+    HoughLines(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0.1,
+               CV_PI / 180 * 1); // runs the actual detection
+    cout << "num lines: " << HT_v_lines.size() << endl;
+    for (size_t i{0}; i < HT_v_lines.size(); i++) {
+        cout << "v_line " << i << ": rho " << HT_v_lines[i][0] << ", theta " << HT_v_lines[i][1] / CV_PI * 180.0
+             << ", cnt "
+             << HT_v_lines[i][2] << endl;
+    }
+
+//    HoughLinesP(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x,HT_min_thres_x,3);
+//    for( size_t i = 0; i < HT_v_lines.size(); i++ )
+//    {
+//        line( cimage_edges, Point(HT_v_lines[i][0], HT_v_lines[i][1]),
+//              Point( HT_v_lines[i][2], HT_v_lines[i][3]), Scalar(255,0,0), 1, 8 );
+//    }
+
+    // Draw the lines
+    for (auto &HT_v_line : HT_v_lines) {
+        float rho = HT_v_line[0], theta = HT_v_line[1];
+        Point pt1, pt2;
+        double a = cos(theta), b = sin(theta);
+        double x0 = a * rho, y0 = b * rho;
+        pt1.x = cvRound(x0 + 1000 * (-b));
+        pt1.y = cvRound(y0 + 1000 * (a));
+        pt2.x = cvRound(x0 - 1000 * (-b));
+        pt2.y = cvRound(y0 - 1000 * (a));
+        line(cimage_edges, pt1, pt2, Scalar(255, 0, 0), 1, LINE_AA);
+    }
+
+    /** Find vertical lines*/
+    HoughLines(image_edges, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
+               CV_PI / 180 * 89,
+               CV_PI / 180 * 91); // runs the actual detection
+    for (size_t i{0}; i < HT_h_lines.size(); i++) {
+        cout << "h_line " << i << ": rho " << HT_h_lines[i][0] << ", theta " << HT_h_lines[i][1] / CV_PI * 180.0
+             << ", cnt "
+             << HT_h_lines[i][2] << endl;
+    }
+    // Draw the lines
+    for (auto &HT_h_line : HT_h_lines) {
+        float rho = HT_h_line[0], theta = HT_h_line[1];
+        Point pt1, pt2;
+        double a = cos(theta), b = sin(theta);
+        double x0 = a * rho, y0 = b * rho;
+        pt1.x = cvRound(x0 + 1000 * (-b));
+        pt1.y = cvRound(y0 + 1000 * (a));
+        pt2.x = cvRound(x0 - 1000 * (-b));
+        pt2.y = cvRound(y0 - 1000 * (a));
+        line(cimage_edges, pt1, pt2, Scalar(0, 0, 255), 1, LINE_AA);
+    }
+
+    namedWindow("Detected Lines  - Standard Hough Line Transform", WINDOW_NORMAL);
+    imshow("Detected Lines  - Standard Hough Line Transform", cimage_edges);
+
+    waitKey(0);
     return 0;
 
 }
