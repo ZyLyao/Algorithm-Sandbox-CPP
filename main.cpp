@@ -28,20 +28,31 @@ void get_z_vector(const Eigen::MatrixXf &grid, Eigen::VectorXf &vec, size_t x_id
 }
 
 void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
-//    cout << "get_z_vector: " << step << endl;
+    size_t x_ = x_idx;
     for (size_t i{0}; i < vec.size(); i++) {
-        vec[i] = abs(grid(x_idx + i * step, y_idx)) > FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+        vec[i] = abs(grid(x_, y_idx)) >
+                 FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+//        vec[i] = grid(x_, y_idx); // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+//        vec[i] = 1;
+        x_ += step;
     }
 }
 
-
+//void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
+//    size_t x_ = x_idx;
+//    for (size_t i{0}; i < vec.size(); i++) {
+//        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+////        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+//        x_idx += step;
+//    }
+//}
 
 #include <vector>
 #include <utility>
 #include <iostream>
 
 std::pair<std::size_t, std::size_t>
-get_bounded_interval(std::vector<bool> const & vals,
+get_bounded_interval(std::vector<bool> const &vals,
                      std::size_t const begin_idx)
 // returns a bounding interval where the first and second indexes have
 // equivalent values in vals and all indexes between first and second
@@ -249,23 +260,32 @@ get_max_gap_with_holes(std::vector<bool> const & vals,
 }
 
 int main() {
+    auto start = chrono::steady_clock::now();
 //    std::ifstream ifs ("output.csv", std::ifstream::in);
 
 //    std::ifstream ifs ("aa.txt", std::ifstream::in);
-    std::ifstream ifs("output_mtx.txt", std::ifstream::in);
+    std::ifstream ifs("output_mtx_20210114211548.txt", std::ifstream::in);
+//    std::ifstream ifs("output_mtx_dig.txt", std::ifstream::in);
     float x_range = 60.0;
     float y_range = 80.0;
     float z_range = 45.0;
-    float cell_size = 0.5;
+    float cell_size = 0.1;
     size_t x_num = x_range / cell_size;
     size_t y_num = y_range / cell_size;
     size_t z_num = z_range / cell_size;
     cout << "size: x " << x_num << " ,y " << y_num << " ,z " << z_num << endl;
 
+    float gap_tolerance = 2.0; //meter
+    float min_thres = 1.0; //meter
+    float max_thres = 5.0; //meter
+    float time_factor = 1e6;
+
     std::string str;
-    Eigen::MatrixXf grid(10800, 160);
+    Eigen::MatrixXf grid(x_num * z_num, y_num);
     grid.setZero();
     int cnt_line = 0;
+    auto t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - start).count();
+    cout << "Time: Start reading matrix at: " << float(t_elapsed) / time_factor << endl;
     while (std::getline(ifs, str)) {
         std::vector<string> vec_this_line;
         boost::algorithm::split(vec_this_line, str, [](char c) { return c == ','; });
@@ -277,17 +297,26 @@ int main() {
     }
     ifs.close();
 
+    t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - start).count();
+    cout << "Time: Done reading matrix at: " << float(t_elapsed) / time_factor << endl;
+
     /** After this line is the same for SHU and this demo*/
     /** convert eigen matrix to Mat*/
+    cout << "Restart counting time." << endl;
+    auto t_read = chrono::steady_clock::now();
     cout << "grid sum; " << grid.sum() << endl;
     Eigen::MatrixXf pc_mtx(x_num, y_num);
     pc_mtx.setZero();
-//    Eigen::VectorXf vec(z_num);
+    Eigen::VectorXf vec(z_num);
     std::vector<bool> z_array(z_num); // for temporary saving z values at specific x,y.
 //    cout << "vec size: " << vec.size() << endl;
-    for (size_t i{0}; i < x_num; i++) {
-        for (size_t j{0}; j < y_num; j++) {
-            /** Checking Max - Min*/
+    size_t max_hole_len = gap_tolerance / cell_size;
+    cout << "max_hole_len: " << max_hole_len << "\n";
+    size_t cnt_tmp = 0;
+    for (size_t j{0}; j < y_num; j++) {
+        for (size_t i{0}; i < x_num; i++) {
+            cnt_tmp++;
+//            /** Checking Max - Min*/
 //            get_z_vector(grid, vec, i, j, x_num);
 //            float max = -numeric_limits<float>::infinity();
 //            float min = numeric_limits<float>::infinity();
@@ -298,18 +327,38 @@ int main() {
 //            pc_mtx(i, j) = max - min;
 
             /** Find longest consecutive segment*/
+//            auto t_1 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
+//            if(cnt_tmp<100||cnt_tmp>479900)
+//                cout << "1: " << t_1;
             get_z_std_vector(grid, z_array, i, j, x_num);
+//            auto t_2 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
+//            if(cnt_tmp<100||cnt_tmp>479900)
+//                cout<<" 2: "<<t_2 - t_1;
+
             size_t max_len{0};
-            std::vector<std::pair<std::size_t, std::size_t>> gaps;
-            bool is_v_edge = get_max_gap_with_holes(z_array,  max_len, gaps, 10, 0);
-            //TODO-Continue: Continue here on selecting longest segment
+            static thread_local std::vector<std::pair<std::size_t, std::size_t>> gaps;
+            gaps.clear();
+            bool is_v_edge = get_max_gap_with_holes(z_array, max_len, gaps, max_hole_len, false);
+//            auto t_3 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
+//            if(cnt_tmp<100||cnt_tmp>479900)
+//                cout<<" 3: "<<t_3 - t_2<<"\n";
+
+            if (is_v_edge) {
+                if (max_len > min_thres / cell_size && max_len < max_thres / cell_size) {
+                    pc_mtx(i, j) = max_len;
+                }
+            }
+
         }
     }
-
+    cout << "cnt_tmp: " << cnt_tmp << endl;
+    t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
+    cout << "Time: Done finding longest segment at: " << float(t_elapsed) / time_factor << endl;
+    cout << "pc_mtx sum: " << pc_mtx.sum() << endl;
 
     /** Converting matrix to image */
 //    pc_mtx.setRandom();
-    cout << "test-Mtx: " << pc_mtx << endl;
+//    cout << "test-Mtx: " << pc_mtx << endl;
     cv::Mat_<float> pc_image(x_num, y_num); // create cv mat object
 
     eigen2cv(pc_mtx, pc_image); // convert eigen matrix to opencv mat
@@ -322,19 +371,35 @@ int main() {
     cout << "Mat: " << pc_image.rows << " " << pc_image.cols << endl;
     namedWindow("Display Image", WINDOW_NORMAL);
     imshow("Display Image", pc_image);
-    moveWindow("Display Image", 200,20);
+    moveWindow("Display Image", 0, 20);
 
     Mat image_edges;
+    Mat image_BW;
     int lowThreshold = 0;
     const int ratio = 3;
     const int kernel_size = 3;
 
+    t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
+    cout << "Time: Done image conversion at: " << float(t_elapsed) / time_factor << endl;
+    int n_rows = pc_iamge_grey.rows;
+    int n_cols = pc_iamge_grey.cols;
+    cout << "Mat size: " << n_rows << " " << n_cols << endl;
+//    size_t h_diff_thres = 5; //pixels
+//    for (size_t i{0}; i < n_rows; i++) {
+//        for (size_t j{0}; j < n_cols; j++) {
+//            if (pc_iamge_grey.at<int>(i,j) >= h_diff_thres) {
+//                image_BW.at<int>(i,j) = 1;
+//            } else {
+//                image_BW.at<int>(i,j) = 0;
+//            }
+//        }
+//    }
 
     /** Edge detection */
     Canny(pc_iamge_grey, image_edges, lowThreshold, lowThreshold * ratio, kernel_size);
     namedWindow("image_edges Image", WINDOW_NORMAL);
     imshow("image_edges Image", image_edges);
-    moveWindow("image_edges Image", 600,20);
+    moveWindow("image_edges Image", 900, 20);
 
     vector<Vec3f> HT_v_lines;
 //    vector<Vec4i> HT_v_lines;
@@ -343,15 +408,16 @@ int main() {
 
     float HT_theta_resolution = 0.1 * CV_PI / 180; // radian
     float HT_rho_resolution = 0.5f * cell_size; // pixel
-    float min_edge_len = 10.0; // meter
+    float min_edge_len = 5.0; // meter
     int HT_min_thres_x = int(min_edge_len / cell_size);
-    int HT_min_thres_y = 3 * int(min_edge_len / cell_size);
+    int HT_min_thres_y = int(min_edge_len / cell_size);
     Mat cimage_edges;
+//    cvtColor(image_edges, cimage_edges, COLOR_GRAY2BGR);
     cvtColor(image_edges, cimage_edges, COLOR_GRAY2BGR);
 
     /** Find vertical lines*/
-    HoughLines(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0.1,
-               CV_PI / 180 * 1); // runs the actual detection
+    HoughLines(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0,
+               CV_PI / 180 * 2); // runs the actual detection
     cout << "num lines: " << HT_v_lines.size() << endl;
     for (size_t i{0}; i < HT_v_lines.size(); i++) {
         cout << "v_line " << i << ": rho " << HT_v_lines[i][0] << ", theta " << HT_v_lines[i][1] / CV_PI * 180.0
@@ -378,8 +444,10 @@ int main() {
         pt2.y = cvRound(y0 - 1000 * (a));
         line(cimage_edges, pt1, pt2, Scalar(255, 0, 0), 1, LINE_AA);
     }
+    t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
+    cout << "Time: Done finding vertical lines at: " << float(t_elapsed) / time_factor << endl;
 
-    /** Find vertical lines*/
+    /** Find horizontal lines*/
     HoughLines(image_edges, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
                CV_PI / 180 * 89,
                CV_PI / 180 * 91); // runs the actual detection
@@ -400,10 +468,12 @@ int main() {
         pt2.y = cvRound(y0 - 1000 * (a));
         line(cimage_edges, pt1, pt2, Scalar(0, 0, 255), 1, LINE_AA);
     }
+    t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
+    cout << "Time: Done finding horizontal lines at: " << float(t_elapsed) / time_factor << endl;
 
     namedWindow("Detected Lines  - Standard Hough Line Transform", WINDOW_NORMAL);
     imshow("Detected Lines  - Standard Hough Line Transform", cimage_edges);
-    moveWindow("Detected Lines  - Standard Hough Line Transform", 1000,20);
+    moveWindow("Detected Lines  - Standard Hough Line Transform", 1800, 20);
 
     waitKey(0);
     return 0;
