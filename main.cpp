@@ -373,8 +373,8 @@ int main() {
     imshow("Display Image", pc_image);
     moveWindow("Display Image", 0, 20);
 
-    Mat image_edges;
-    Mat image_BW;
+//    Mat image_edges;
+    Mat image_BW(pc_iamge_grey.rows, pc_iamge_grey.cols, CV_8U);
     int lowThreshold = 0;
     const int ratio = 3;
     const int kernel_size = 3;
@@ -384,25 +384,24 @@ int main() {
     int n_rows = pc_iamge_grey.rows;
     int n_cols = pc_iamge_grey.cols;
     cout << "Mat size: " << n_rows << " " << n_cols << endl;
-//    size_t h_diff_thres = 5; //pixels
-//    for (size_t i{0}; i < n_rows; i++) {
-//        for (size_t j{0}; j < n_cols; j++) {
-//            if (pc_iamge_grey.at<int>(i,j) >= h_diff_thres) {
-//                image_BW.at<int>(i,j) = 1;
-//            } else {
-//                image_BW.at<int>(i,j) = 0;
-//            }
-//        }
-//    }
+    size_t h_diff_thres = 5; //pixels
+    for (size_t i{0}; i < n_rows; i++) {
+        for (size_t j{0}; j < n_cols; j++) {
+            if (pc_iamge_grey.at<uint8_t>(i, j) >= h_diff_thres) {
+                image_BW.at<uint8_t>(i, j) = 1;
+            } else {
+                image_BW.at<uint8_t>(i, j) = 0;
+            }
+        }
+    }
 
-    /** Edge detection */
-    Canny(pc_iamge_grey, image_edges, lowThreshold, lowThreshold * ratio, kernel_size);
-    namedWindow("image_edges Image", WINDOW_NORMAL);
-    imshow("image_edges Image", image_edges);
-    moveWindow("image_edges Image", 900, 20);
+//    /** Edge detection */
+//    Canny(pc_iamge_grey, image_edges, lowThreshold, lowThreshold * ratio, kernel_size);
+//    namedWindow("image_edges Image", WINDOW_NORMAL);
+//    imshow("image_edges Image", image_edges);
+//    moveWindow("image_edges Image", 900, 20);
 
     vector<Vec3f> HT_v_lines;
-//    vector<Vec4i> HT_v_lines;
     vector<Vec3f> HT_h_lines; // will hold the results of the detection
     cout << "num lines: " << HT_v_lines.size() << endl;
 
@@ -411,12 +410,11 @@ int main() {
     float min_edge_len = 5.0; // meter
     int HT_min_thres_x = int(min_edge_len / cell_size);
     int HT_min_thres_y = int(min_edge_len / cell_size);
-    Mat cimage_edges;
-//    cvtColor(image_edges, cimage_edges, COLOR_GRAY2BGR);
-    cvtColor(image_edges, cimage_edges, COLOR_GRAY2BGR);
+    Mat image_color = image_BW * 255;
+    cvtColor(image_color, image_color, COLOR_GRAY2BGR);
 
     /** Find vertical lines*/
-    HoughLines(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0,
+    HoughLines(image_BW, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0,
                CV_PI / 180 * 2); // runs the actual detection
     cout << "num lines: " << HT_v_lines.size() << endl;
     for (size_t i{0}; i < HT_v_lines.size(); i++) {
@@ -428,7 +426,7 @@ int main() {
 //    HoughLinesP(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x,HT_min_thres_x,3);
 //    for( size_t i = 0; i < HT_v_lines.size(); i++ )
 //    {
-//        line( cimage_edges, Point(HT_v_lines[i][0], HT_v_lines[i][1]),
+//        line( image_color, Point(HT_v_lines[i][0], HT_v_lines[i][1]),
 //              Point( HT_v_lines[i][2], HT_v_lines[i][3]), Scalar(255,0,0), 1, 8 );
 //    }
 
@@ -442,13 +440,13 @@ int main() {
         pt1.y = cvRound(y0 + 1000 * (a));
         pt2.x = cvRound(x0 - 1000 * (-b));
         pt2.y = cvRound(y0 - 1000 * (a));
-        line(cimage_edges, pt1, pt2, Scalar(255, 0, 0), 1, LINE_AA);
+        line(image_color, pt1, pt2, Scalar(255, 0, 0), 1, LINE_AA);
     }
     t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
     cout << "Time: Done finding vertical lines at: " << float(t_elapsed) / time_factor << endl;
 
     /** Find horizontal lines*/
-    HoughLines(image_edges, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
+    HoughLines(image_BW, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
                CV_PI / 180 * 89,
                CV_PI / 180 * 91); // runs the actual detection
     for (size_t i{0}; i < HT_h_lines.size(); i++) {
@@ -466,13 +464,13 @@ int main() {
         pt1.y = cvRound(y0 + 1000 * (a));
         pt2.x = cvRound(x0 - 1000 * (-b));
         pt2.y = cvRound(y0 - 1000 * (a));
-        line(cimage_edges, pt1, pt2, Scalar(0, 0, 255), 1, LINE_AA);
+        line(image_color, pt1, pt2, Scalar(0, 0, 255), 1, LINE_AA);
     }
     t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
     cout << "Time: Done finding horizontal lines at: " << float(t_elapsed) / time_factor << endl;
 
     namedWindow("Detected Lines  - Standard Hough Line Transform", WINDOW_NORMAL);
-    imshow("Detected Lines  - Standard Hough Line Transform", cimage_edges);
+    imshow("Detected Lines  - Standard Hough Line Transform", image_color);
     moveWindow("Detected Lines  - Standard Hough Line Transform", 1800, 20);
 
     waitKey(0);
