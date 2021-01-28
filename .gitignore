@@ -1,2 +1,5 @@
+
+#Folders that don not need to be uploaded onto remote Git repository
 cmake-build-debug/
 .idea/
+Data_folder/

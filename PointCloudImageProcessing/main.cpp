@@ -264,7 +264,7 @@ int main() {
 //    std::ifstream ifs ("output.csv", std::ifstream::in);
 
 //    std::ifstream ifs ("aa.txt", std::ifstream::in);
-    std::ifstream ifs("output_mtx_20210114211548.txt", std::ifstream::in);
+    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
 //    std::ifstream ifs("output_mtx_dig.txt", std::ifstream::in);
     float x_range = 60.0;
     float y_range = 80.0;
