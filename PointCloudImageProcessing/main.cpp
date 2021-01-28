@@ -266,10 +266,10 @@ int main() {
 //    std::ifstream ifs ("aa.txt", std::ifstream::in);
     std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
 //    std::ifstream ifs("output_mtx_dig.txt", std::ifstream::in);
-    float x_range = 60.0;
-    float y_range = 80.0;
-    float z_range = 45.0;
-    float cell_size = 0.1;
+    float x_range = 60.0; // hard-coded for this dataset
+    float y_range = 80.0; // hard-coded for this dataset
+    float z_range = 45.0; // hard-coded for this dataset
+    float cell_size = 0.1; // hard-coded for this dataset
     size_t x_num = x_range / cell_size;
     size_t y_num = y_range / cell_size;
     size_t z_num = z_range / cell_size;
