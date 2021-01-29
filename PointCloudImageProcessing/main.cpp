@@ -29,11 +29,10 @@ void get_z_vector(const Eigen::MatrixXf &grid, Eigen::VectorXf &vec, size_t x_id
 
 void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
     size_t x_ = x_idx;
-    for (size_t i{0}; i < vec.size(); i++) {
-        vec[i] = abs(grid(x_, y_idx)) >
-                 FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
-//        vec[i] = grid(x_, y_idx); // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
-//        vec[i] = 1;
+    for (size_t i{0}; i < vec.size(); i++)
+    {
+//        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;
+        vec[i] = !grid.block(x_ - 1, y_idx - 1, 3, 3).isZero();
         x_ += step;
     }
 }
@@ -41,8 +40,8 @@ void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_
 //void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
 //    size_t x_ = x_idx;
 //    for (size_t i{0}; i < vec.size(); i++) {
-//        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
-////        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON; // TODO: Checking if this cell filled. The grid matrix will not save float value in the future.
+//        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;  
+////        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;  
 //        x_idx += step;
 //    }
 //}
@@ -261,11 +260,9 @@ get_max_gap_with_holes(std::vector<bool> const & vals,
 
 int main() {
     auto start = chrono::steady_clock::now();
-//    std::ifstream ifs ("output.csv", std::ifstream::in);
 
-//    std::ifstream ifs ("aa.txt", std::ifstream::in);
     std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
-//    std::ifstream ifs("output_mtx_dig.txt", std::ifstream::in);
+//    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
     float x_range = 60.0; // hard-coded for this dataset
     float y_range = 80.0; // hard-coded for this dataset
     float z_range = 45.0; // hard-coded for this dataset
@@ -277,7 +274,7 @@ int main() {
 
     float gap_tolerance = 2.0; //meter
     float min_thres = 1.0; //meter
-    float max_thres = 5.0; //meter
+    float max_thres = 4.0; //meter
     float time_factor = 1e6;
 
     std::string str;
@@ -313,8 +310,10 @@ int main() {
     size_t max_hole_len = gap_tolerance / cell_size;
     cout << "max_hole_len: " << max_hole_len << "\n";
     size_t cnt_tmp = 0;
-    for (size_t j{0}; j < y_num; j++) {
-        for (size_t i{0}; i < x_num; i++) {
+    for (size_t j{1}; j < y_num - 1; j++) // ignore x-y on the edge of the grid
+    {
+        for (size_t i{1}; i < x_num - 1; i++) // ignore x-y on the edge of the grid
+        {
             cnt_tmp++;
 //            /** Checking Max - Min*/
 //            get_z_vector(grid, vec, i, j, x_num);
@@ -407,7 +406,7 @@ int main() {
 
     float HT_theta_resolution = 0.1 * CV_PI / 180; // radian
     float HT_rho_resolution = 0.5f * cell_size; // pixel
-    float min_edge_len = 5.0; // meter
+    float min_edge_len = 10.0; // meter
     int HT_min_thres_x = int(min_edge_len / cell_size);
     int HT_min_thres_y = int(min_edge_len / cell_size);
     Mat image_color = image_BW * 255;
