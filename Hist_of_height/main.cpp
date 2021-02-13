@@ -44,8 +44,8 @@ int main() {
 
     auto t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - start).count();
     cout << "Time: Start reading matrix at: " << float(t_elapsed) / time_factor << endl;
-//    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
-    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
+    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
+//    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
 
     float x_range = 60.0; // hard-coded for this dataset
     float y_range = 80.0; // hard-coded for this dataset
@@ -107,6 +107,16 @@ int main() {
     float hist_total = std::accumulate(hist.begin(), hist.begin() + z_limit_pixel, 0);
     cout << "hist max index: " << hist_max_idx << " Value: " << *itr_hist_max << " Total: " << hist_total << " Ratio: "
          << static_cast<float>(*itr_hist_max) / hist_total << endl;
+    float h_hist_thres = 0.5f * *itr_hist_max;
+    vector<pair<size_t, size_t>> h_hist_peaks;
+    for (int i{0};i<hist.size();++i) {
+        if(hist[i]>h_hist_thres && i < z_limit_pixel){
+            h_hist_peaks.emplace(h_hist_peaks.end(), pair<size_t, size_t>(i, hist[i]));
+            cout << "new peak: " << i << " " << hist[i] << "\n";
+        }
+    }
+    cout << " Deck peak: " << h_hist_peaks.back().first<<" "<<h_hist_peaks.back().second << endl;
+
     line(image, Point(hist_max_idx, 0), Point(hist_max_idx, image.rows), Scalar(0, 255, 0), 1,LineTypes::LINE_4);
 
     /** Show image*/

@@ -29,22 +29,54 @@ void get_z_vector(const Eigen::MatrixXf &grid, Eigen::VectorXf &vec, size_t x_id
 
 void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
     size_t x_ = x_idx;
-    for (size_t i{0}; i < vec.size(); i++)
+    for (size_t i{0}; i < vec.size()-1; i++)
     {
 //        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;
+//        cout << x_ - 1<<" "<< y_idx - 1 << endl;
         vec[i] = !grid.block(x_ - 1, y_idx - 1, 3, 3).isZero();
         x_ += step;
     }
 }
 
-//void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_t x_idx, size_t y_idx, size_t step) {
-//    size_t x_ = x_idx;
-//    for (size_t i{0}; i < vec.size(); i++) {
-//        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;  
-////        vec[i] = abs(grid(x_, y_idx)) > FLT_EPSILON;  
-//        x_idx += step;
-//    }
-//}
+pair<float, float>
+approx_deck_Z_range(const Eigen::MatrixXf &grid, float margin, int x_num, int y_num, int z_num, float zmin,
+                    float cell_size) {
+
+    /** Convert the bool grid into a int grid*/
+    long n_rows{grid.rows()}, n_cols{grid.cols()};
+    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic> grid_int;
+    grid_int.resize(n_rows, n_cols);
+    for (size_t i{0}; i < grid_int.cols(); i++) {
+        for (size_t j{0}; j < grid_int.rows(); j++) {
+            grid_int(j, i) = abs(grid(j, i)) > std::numeric_limits<float>::epsilon() ? 1 : 0; // if true, set to 1
+        }
+    }
+
+    /** Calculate histogram of the height of points*/
+    vector<int> hist(z_num, 0); // bins
+    for (int i{0}; i < z_num; i++) {
+        hist[i] = grid_int.block(i * x_num, 0, x_num, y_num).sum();
+    }
+
+    float z_start = zmin; // height where the grid_struct starts
+
+    float z_lim = 35.0f - z_start; // lowest possible height limitation of deck
+    size_t z_limit_pixel = static_cast<int>(z_lim / cell_size);
+
+    auto itr_hist_max = max_element(hist.begin(), hist.begin() + z_limit_pixel);
+    float h_hist_thres = 0.5f * (*itr_hist_max);
+    vector<pair<size_t, size_t>> h_hist_peaks;
+    for (size_t i{0}; i < hist.size(); ++i) {
+        if (hist[i] > h_hist_thres && i < z_limit_pixel) {
+            h_hist_peaks.emplace(h_hist_peaks.end(), pair<size_t, size_t>(i, hist[i]));
+        }
+    }
+    size_t deck_idx = h_hist_peaks.back().first;
+
+    /** Calculate the height range of the deck*/
+    float h_deck = zmin + deck_idx * cell_size;
+    return pair<float, float>(h_deck - margin, h_deck + margin);
+}
 
 #include <vector>
 #include <utility>
@@ -258,22 +290,112 @@ get_max_gap_with_holes(std::vector<bool> const & vals,
     return max_gap_with_holes_len > 0U;
 }
 
+
+std::pair<size_t,size_t> cal_pixel_Lidar_pos(float x_min, float y_min, float cell_size){
+    std::pair<size_t, size_t> pixel_Lidar(0, 0);
+    std::pair<float, float> ref_Lidar_pos(0.0f, 0.0f);
+    float x_diff = ref_Lidar_pos.first - x_min;
+    float y_diff = ref_Lidar_pos.second - y_min;
+    cout << "x_diff,y_diff " << x_diff << " " << y_diff << endl;
+    assert (x_diff > 0.0f && y_diff > 0.0f);
+    pixel_Lidar.first = static_cast<size_t>((ref_Lidar_pos.first - x_min) / cell_size);
+    pixel_Lidar.second = static_cast<size_t>((ref_Lidar_pos.second - y_min) / cell_size);
+    return pixel_Lidar;
+}
+
+std::vector<pair<float, float>> organize_edge_candidate(std::vector<Vec3f> &edge_candidates, float edge_thres){
+    // organize the candidate vector in increasing order wrt the rho.
+    sort(edge_candidates.begin(), edge_candidates.end(), [](const Vec3f &a, const Vec3f &b) { return a[0] < b[0]; });
+    std::vector<pair<float, float>> organized_candidates;
+//    for (size_t i{0}; i < edge_candidates.size(); i++) {
+//        cout << edge_candidates[i][0]<<" "<<edge_candidates[i][1] << endl;
+//    }
+//    cout<<"----------"<<endl;
+
+//    for(const auto& itr:edge_candidates){
+        for(size_t i{0}; i < edge_candidates.size(); i++){
+        static float tmp_rho{0.0f};
+        static float tmp_theta{0.0f};
+        static int cnt{0};
+        static bool flag_first{true};
+//        cout<<tmp_rho<<" "<<tmp_theta<<" "<<cnt<<" "<<flag_first<<endl;
+        if(abs(tmp_rho-edge_candidates[i][0])<edge_thres || flag_first){
+            auto ratio = static_cast<float>(cnt) / static_cast<float>(cnt + 1);
+//            cout << "ratio: " << ratio << endl;
+            if(!flag_first) {
+                tmp_rho = tmp_rho * ratio + edge_candidates[i][0] * (1.0f - ratio);
+//                cout << "check non first " << tmp_rho << " " << ratio << " " <<edge_candidates[i][0] << endl;
+                tmp_theta = tmp_theta * ratio + edge_candidates[i][1] * (1.0f - ratio);
+                cnt++;
+            }else{
+                tmp_rho = edge_candidates[i][0];
+                tmp_theta = edge_candidates[i][1];
+                cnt = 1;
+                flag_first = false;
+            }
+            if(i == edge_candidates.size()-1) {
+                organized_candidates.emplace_back(std::pair<float,float>(tmp_rho,tmp_theta));
+                tmp_rho = tmp_theta = 0;
+                cnt = 0;
+                flag_first = true;
+            }
+        }else{
+            organized_candidates.emplace_back(std::pair<float,float>(tmp_rho,tmp_theta));
+            tmp_rho = edge_candidates[i][0];
+            tmp_theta = edge_candidates[i][1];
+            cnt = 1;
+//            flag_first = true;
+        }
+//        cout<<tmp_rho<<endl;
+    }
+    cout << "organized: length " << organized_candidates.size() << endl;
+    for(auto i : organized_candidates){
+        cout << "organized: " << i.first << " " << i.second << endl;
+    }
+
+    return organized_candidates;
+}
+
+std::pair<size_t,size_t> two_near_edge(size_t tgt_pixel, const vector<pair<float, float>>& all_edges){
+    std::pair<size_t, size_t> two_edges(0, all_edges.size());
+    for(size_t i{0}; i<all_edges.size(); i++) {
+        if (all_edges[i].first < tgt_pixel && i >= two_edges.first) {
+            two_edges.first = i;
+        }
+
+//        cout<<"check 2 pos: "<<all_edges[i].second<<" "<<tgt_pixel<<" "<<i<<" "<<two_edges.second<<endl;
+        if(all_edges[i].first > tgt_pixel && i <= two_edges.second){
+            two_edges.second = i;
+        }
+    }
+//    cout << "two_edges: 1: " << two_edges.first << " " << all_edges[two_edges.first].first << endl;
+//    cout << "two_edges: 2: " << two_edges.second << " " << all_edges[two_edges.second].first<< endl;
+
+    return two_edges;
+}
+
 int main() {
+
     auto start = chrono::steady_clock::now();
 
-    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
-//    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
+//    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
+    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
     float x_range = 60.0; // hard-coded for this dataset
     float y_range = 80.0; // hard-coded for this dataset
     float z_range = 45.0; // hard-coded for this dataset
+    float x_min = -20.0f;
+    float y_min = -40.0f;
+    float z_min = 15.0;// hard-coded for this dataset
     float cell_size = 0.1; // hard-coded for this dataset
+    auto pixel_Lidar = cal_pixel_Lidar_pos(x_min, y_min, cell_size);
+    cout << "pixel_Lidar: " << pixel_Lidar.first << " " << pixel_Lidar.second << endl;
     size_t x_num = x_range / cell_size;
     size_t y_num = y_range / cell_size;
     size_t z_num = z_range / cell_size;
     cout << "size: x " << x_num << " ,y " << y_num << " ,z " << z_num << endl;
 
     float gap_tolerance = 2.0; //meter
-    float min_thres = 1.0; //meter
+    float min_thres = 0.5; //meter
     float max_thres = 4.0; //meter
     float time_factor = 1e6;
 
@@ -298,15 +420,26 @@ int main() {
     cout << "Time: Done reading matrix at: " << float(t_elapsed) / time_factor << endl;
 
     /** After this line is the same for SHU and this demo*/
+
+    /** Remove points far away from the deck*/
+    float margin = 5.0; // meters
+    auto deck_range = approx_deck_Z_range(grid, margin, x_num, y_num, z_num, z_min, cell_size);
+    cout << "Find proper range for deck: " << deck_range.first << " " << deck_range.second << "\n";
+    int z_up_idx = ceil((deck_range.first - z_min) / cell_size);
+    int z_bot_idx = floor((deck_range.second - z_min) / cell_size);
+    Eigen::MatrixXf grid_deck_cand = grid.block(z_up_idx * x_num, 0, (z_bot_idx - z_up_idx) * x_num, y_num);
+    cout << "z_up and z_bot indeices: " << z_up_idx << " " << z_bot_idx << endl;
+    cout << "grid_deck_cand size: " << grid_deck_cand.rows() << " " << grid_deck_cand.cols() << endl;
+
     /** convert eigen matrix to Mat*/
     cout << "Restart counting time." << endl;
     auto t_read = chrono::steady_clock::now();
     cout << "grid sum; " << grid.sum() << endl;
     Eigen::MatrixXf pc_mtx(x_num, y_num);
     pc_mtx.setZero();
-    Eigen::VectorXf vec(z_num);
     std::vector<bool> z_array(z_num); // for temporary saving z values at specific x,y.
-//    cout << "vec size: " << vec.size() << endl;
+    std::vector<bool> z_array_deck(z_bot_idx - z_up_idx + 1); // for temporary saving z values at specific x,y.
+    cout << "z_array_deck size: " << z_array_deck.size() << endl;
     size_t max_hole_len = gap_tolerance / cell_size;
     cout << "max_hole_len: " << max_hole_len << "\n";
     size_t cnt_tmp = 0;
@@ -314,6 +447,7 @@ int main() {
     {
         for (size_t i{1}; i < x_num - 1; i++) // ignore x-y on the edge of the grid
         {
+//            cout << "i,j " << i << " " << j << "\n";
             cnt_tmp++;
 //            /** Checking Max - Min*/
 //            get_z_vector(grid, vec, i, j, x_num);
@@ -326,21 +460,14 @@ int main() {
 //            pc_mtx(i, j) = max - min;
 
             /** Find longest consecutive segment*/
-//            auto t_1 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
-//            if(cnt_tmp<100||cnt_tmp>479900)
-//                cout << "1: " << t_1;
-            get_z_std_vector(grid, z_array, i, j, x_num);
-//            auto t_2 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
-//            if(cnt_tmp<100||cnt_tmp>479900)
-//                cout<<" 2: "<<t_2 - t_1;
+//            get_z_std_vector(grid, z_array, i, j, x_num);
+            get_z_std_vector(grid_deck_cand, z_array_deck, i, j, x_num);
 
             size_t max_len{0};
             static thread_local std::vector<std::pair<std::size_t, std::size_t>> gaps;
             gaps.clear();
-            bool is_v_edge = get_max_gap_with_holes(z_array, max_len, gaps, max_hole_len, false);
-//            auto t_3 = chrono::duration_cast<chrono::nanoseconds>(chrono::steady_clock::now() - start).count();
-//            if(cnt_tmp<100||cnt_tmp>479900)
-//                cout<<" 3: "<<t_3 - t_2<<"\n";
+//            bool is_v_edge = get_max_gap_with_holes(z_array, max_len, gaps, max_hole_len, false);
+            bool is_v_edge = get_max_gap_with_holes(z_array_deck, max_len, gaps, max_hole_len, false);
 
             if (is_v_edge) {
                 if (max_len > min_thres / cell_size && max_len < max_thres / cell_size) {
@@ -409,18 +536,26 @@ int main() {
     float min_edge_len = 10.0; // meter
     int HT_min_thres_x = int(min_edge_len / cell_size);
     int HT_min_thres_y = int(min_edge_len / cell_size);
+    float HT_ang_thres = 1.0f;
     Mat image_color = image_BW * 255;
     cvtColor(image_color, image_color, COLOR_GRAY2BGR);
 
     /** Find vertical lines*/
-    HoughLines(image_BW, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0, CV_PI / 180 * 0,
-               CV_PI / 180 * 2); // runs the actual detection
+    HoughLines(image_BW, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x, 0, 0,
+               CV_PI / 180 * 1 - HT_ang_thres,
+               CV_PI / 180 * 1 + HT_ang_thres); // runs the actual detection
     cout << "num lines: " << HT_v_lines.size() << endl;
     for (size_t i{0}; i < HT_v_lines.size(); i++) {
         cout << "v_line " << i << ": rho " << HT_v_lines[i][0] << ", theta " << HT_v_lines[i][1] / CV_PI * 180.0
              << ", cnt "
              << HT_v_lines[i][2] << endl;
     }
+    auto y_lines_organized = organize_edge_candidate(HT_v_lines, 0.5f/cell_size);
+    std::pair<size_t,size_t> y_edges = two_near_edge(pixel_Lidar.second, y_lines_organized);
+    float yn = (y_lines_organized[y_edges.first].first - pixel_Lidar.second)  *cell_size;
+    float yp = (y_lines_organized[y_edges.second].first - pixel_Lidar.second) *cell_size;
+    cout << "yn, yp: " << yn << " " << yp << endl;
+
 
 //    HoughLinesP(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x,HT_min_thres_x,3);
 //    for( size_t i = 0; i < HT_v_lines.size(); i++ )
@@ -446,13 +581,20 @@ int main() {
 
     /** Find horizontal lines*/
     HoughLines(image_BW, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
-               CV_PI / 180 * 89,
-               CV_PI / 180 * 91); // runs the actual detection
+               CV_PI / 180 * 90 - HT_ang_thres,
+               CV_PI / 180 * 90 + HT_ang_thres); // runs the actual detection
     for (size_t i{0}; i < HT_h_lines.size(); i++) {
         cout << "h_line " << i << ": rho " << HT_h_lines[i][0] << ", theta " << HT_h_lines[i][1] / CV_PI * 180.0
              << ", cnt "
              << HT_h_lines[i][2] << endl;
     }
+    auto x_lines_organized = organize_edge_candidate(HT_h_lines, 0.5f/cell_size);
+    std::pair<size_t,size_t> x_edges = two_near_edge(pixel_Lidar.first, x_lines_organized);
+    float xn = (x_lines_organized[x_edges.first].first- pixel_Lidar.first)*cell_size;
+    float xp = (x_lines_organized[x_edges.second].first- pixel_Lidar.first)*cell_size;
+    cout << "xn, xp: " << xn << " " << xp << endl;
+
+
     // Draw the lines
     for (auto &HT_h_line : HT_h_lines) {
         float rho = HT_h_line[0], theta = HT_h_line[1];
@@ -469,8 +611,13 @@ int main() {
     cout << "Time: Done finding horizontal lines at: " << float(t_elapsed) / time_factor << endl;
 
     namedWindow("Detected Lines  - Standard Hough Line Transform", WINDOW_NORMAL);
+    Point Lp_1(pixel_Lidar.second - 10, pixel_Lidar.first), Lp_2(pixel_Lidar.second + 10, pixel_Lidar.first), Lp_3(
+            pixel_Lidar.second, pixel_Lidar.first - 10), Lp_4(pixel_Lidar.second, pixel_Lidar.first + 10);
+
+    line(image_color, Lp_1, Lp_2, Scalar(0, 0, 255), 1, LINE_AA);
+    line(image_color, Lp_3, Lp_4, Scalar(0, 0, 255), 1, LINE_AA);
     imshow("Detected Lines  - Standard Hough Line Transform", image_color);
-    moveWindow("Detected Lines  - Standard Hough Line Transform", 1800, 20);
+    moveWindow("Detected Lines  - Standard Hough Line Transform", 900, 20);
 
     waitKey(0);
     return 0;
