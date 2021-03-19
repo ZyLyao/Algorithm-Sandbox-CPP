@@ -39,9 +39,8 @@ void get_z_std_vector(const Eigen::MatrixXf &grid, std::vector<bool> &vec, size_
 }
 
 pair<float, float>
-approx_deck_Z_range(const Eigen::MatrixXf &grid, float margin, int x_num, int y_num, int z_num, float zmin,
-                    float cell_size) {
-
+cal_approx_deck_Z_range(const Eigen::MatrixXf &grid, float margin, int x_num, int y_num, int z_num, float zmin,
+                        float cell_size) {
     /** Convert the bool grid into a int grid*/
     long n_rows{grid.rows()}, n_cols{grid.cols()};
     Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic> grid_int;
@@ -378,8 +377,8 @@ int main() {
 
     auto start = chrono::steady_clock::now();
 
-//    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
-    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
+    std::ifstream ifs("../../Data_folder/output_mtx_20210114211548.txt", std::ifstream::in);
+//    std::ifstream ifs("../../Data_folder/output_mtx_dig.txt", std::ifstream::in);
     float x_range = 60.0; // hard-coded for this dataset
     float y_range = 80.0; // hard-coded for this dataset
     float z_range = 45.0; // hard-coded for this dataset
@@ -395,8 +394,8 @@ int main() {
     cout << "size: x " << x_num << " ,y " << y_num << " ,z " << z_num << endl;
 
     float gap_tolerance = 2.0; //meter
-    float min_thres = 0.5; //meter
-    float max_thres = 4.0; //meter
+    float min_thres = 1.0f; //meter
+    float max_thres = 4.0f; //meter
     float time_factor = 1e6;
 
     std::string str;
@@ -423,7 +422,7 @@ int main() {
 
     /** Remove points far away from the deck*/
     float margin = 5.0; // meters
-    auto deck_range = approx_deck_Z_range(grid, margin, x_num, y_num, z_num, z_min, cell_size);
+    auto deck_range = cal_approx_deck_Z_range(grid, margin, x_num, y_num, z_num, z_min, cell_size);
     cout << "Find proper range for deck: " << deck_range.first << " " << deck_range.second << "\n";
     int z_up_idx = ceil((deck_range.first - z_min) / cell_size);
     int z_bot_idx = floor((deck_range.second - z_min) / cell_size);
@@ -554,15 +553,9 @@ int main() {
     std::pair<size_t,size_t> y_edges = two_near_edge(pixel_Lidar.second, y_lines_organized);
     float yn = (y_lines_organized[y_edges.first].first - pixel_Lidar.second)  *cell_size;
     float yp = (y_lines_organized[y_edges.second].first - pixel_Lidar.second) *cell_size;
+    cout << "yn,yp pixel: " << y_lines_organized[y_edges.first].first << " " << y_lines_organized[y_edges.second].first
+         << "\n";
     cout << "yn, yp: " << yn << " " << yp << endl;
-
-
-//    HoughLinesP(image_edges, HT_v_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_x,HT_min_thres_x,3);
-//    for( size_t i = 0; i < HT_v_lines.size(); i++ )
-//    {
-//        line( image_color, Point(HT_v_lines[i][0], HT_v_lines[i][1]),
-//              Point( HT_v_lines[i][2], HT_v_lines[i][3]), Scalar(255,0,0), 1, 8 );
-//    }
 
     // Draw the lines
     for (auto &HT_v_line : HT_v_lines) {
@@ -579,8 +572,17 @@ int main() {
     t_elapsed = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t_read).count();
     cout << "Time: Done finding vertical lines at: " << float(t_elapsed) / time_factor << endl;
 
+
+    /** Limit ROI for finding horizontal lines*/
+    float h_edge_thres = 5.0;
+    size_t h_edge_thres_pixel = floor(h_edge_thres/cell_size);
+    size_t h_min_lim_pixel = ceil(y_lines_organized[y_edges.first].first-h_edge_thres_pixel);
+    size_t h_max_lim_pixel = floor(y_lines_organized[y_edges.second].first+h_edge_thres_pixel);
+    cout << "h_lim_pixel:  " << h_min_lim_pixel << " " << h_max_lim_pixel << endl;
+    Mat image_BW_limited (image_BW,Range::all(),Range(h_min_lim_pixel,h_max_lim_pixel));
+
     /** Find horizontal lines*/
-    HoughLines(image_BW, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
+    HoughLines(image_BW_limited, HT_h_lines, HT_rho_resolution, HT_theta_resolution, HT_min_thres_y, 0, 0,
                CV_PI / 180 * 90 - HT_ang_thres,
                CV_PI / 180 * 90 + HT_ang_thres); // runs the actual detection
     for (size_t i{0}; i < HT_h_lines.size(); i++) {
