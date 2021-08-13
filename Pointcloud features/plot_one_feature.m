@@ -5,7 +5,7 @@ subplot(2,2,1)
 scatter(pnts_proj(:,2),pnts_proj(:,1),0.1,feature);
 xlabel('y, m')
 ylabel('x, m')
-colormap(gca,'winter')
+colormap(gca,'turbo')
 c = colorbar;
 c.Label.String = feature_name;
 grid on
@@ -36,7 +36,7 @@ if FLAG_SHOW_3D
     ylabel('y, m')
     zlabel('z, m')
     title("original "+feature_name)
-    colormap(gca,'winter')
+    colormap(gca,'turbo')
     colorbar;
 end
 

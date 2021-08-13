@@ -2,7 +2,7 @@ clear
 
 FLAG_DEBUG = 1;
 FLAG_H_SEP = 0;
-FLAG_SHOW_3D = 0;
+FLAG_SHOW_3D = 1;
 %% geo-fence
 pc = pcread('dig_to_process(SHU).pcd');
 
@@ -49,15 +49,29 @@ if FLAG_DEBUG
 %     quiver3(x,y,z,u,v,w);
 %     hold off
 end
-%% K-R local features
-radius = 1; %meter
+%% K-R or KNN local features
+method = 1; %% 0:K-R 1:KNN
+num_nn = 100; % in case of KNN, number of neighbors
+radius = 1; %in case of KR, radius in meters 
+
+if method == 1
+    knn = knnsearch(pc.Location,pc.Location,'K',num_nn);
+elseif method == 0
+   %nothing 
+end
+
 pc_feature=struct;
 idx_keep = zeros(pc.Count,1);
 cnt = 0;
 for i = 1:pc.Count
     
-    [indices,dists] = findNeighborsInRadius(pc,pc.Location(i,:),radius);
-    pc_local = pc.Location(indices,:);
+    if(method == 0)
+        [indices,dists] = findNeighborsInRadius(pc,pc.Location(i,:),radius);
+        pc_local = pc.Location(indices,:);
+    elseif method == 1
+        pc_local = pc.Location(knn(i,:)',:);
+    end
+    
     if(size(pc_local,1))>3
         cnt = cnt+1;
         idx_keep(cnt) = i;
@@ -94,6 +108,12 @@ for i = 1:pc.Count
         pc_feature(cnt).o1a2 = sum(diff*e2);
         pc_feature(cnt).o2a1 = (diff*e1)'*(diff*e1);
         pc_feature(cnt).o2a2 = (diff*e2)'*(diff*e2);
+        
+        h_max = max(pc_local(:,3));
+        h_min = min(pc_local(:,3));
+        pc_feature(cnt).h_above = h_max-pc.Location(i,3);
+        pc_feature(cnt).h_range = h_max-h_min;
+        pc_feature(cnt).h_below = pc.Location(i,3)-h_min;
     end
     
 end
@@ -115,17 +135,23 @@ if FLAG_DEBUG
 %     plot_one_feature(101,FLAG_SHOW_3D, pc, pnts_proj,"omnivarriance", [pc_feature.omnivarriance] );
 %     plot_one_feature(102,FLAG_SHOW_3D, pc, pnts_proj,"eigenentropy", [pc_feature.eigenentropy] );
 %     plot_one_feature(103,FLAG_SHOW_3D, pc, pnts_proj,"anisotropy", [pc_feature.anisotropy] );
-    
-    plot_one_feature(104,FLAG_SHOW_3D, pc, pnts_proj,"planarity", [pc_feature.planarity] );
-    plot_one_feature(105,FLAG_SHOW_3D, pc, pnts_proj,"linearity", [pc_feature.linearity] );
-    plot_one_feature(106,FLAG_SHOW_3D, pc, pnts_proj,"curvature", [pc_feature.curvature] );
-    plot_one_feature(107,FLAG_SHOW_3D, pc, pnts_proj,"sphericity", [pc_feature.sphericity] );
-    plot_one_feature(108,FLAG_SHOW_3D, pc, pnts_proj,"verticality", [pc_feature.verticality] );
+%     
+%     plot_one_feature(104,FLAG_SHOW_3D, pc, pnts_proj,"planarity", [pc_feature.planarity] );
+%     plot_one_feature(105,FLAG_SHOW_3D, pc, pnts_proj,"linearity", [pc_feature.linearity] );
+%     plot_one_feature(106,FLAG_SHOW_3D, pc, pnts_proj,"curvature", [pc_feature.curvature] );
+%     plot_one_feature(107,FLAG_SHOW_3D, pc, pnts_proj,"sphericity", [pc_feature.sphericity] );
+%     plot_one_feature(108,FLAG_SHOW_3D, pc, pnts_proj,"verticality", [pc_feature.verticality] );
 %     
 %     plot_one_feature(109,FLAG_SHOW_3D, pc, pnts_proj,"o1a1", [pc_feature.o1a1] );
 %     plot_one_feature(110,FLAG_SHOW_3D, pc, pnts_proj,"o1a2", [pc_feature.o1a2] );
 %     plot_one_feature(111,FLAG_SHOW_3D, pc, pnts_proj,"o2a1", [pc_feature.o2a1] );
 %     plot_one_feature(112,FLAG_SHOW_3D, pc, pnts_proj,"o2a2", [pc_feature.o2a2] );
+
+    plot_one_feature(113,FLAG_SHOW_3D, pc, pnts_proj,"h_{above}", [pc_feature.h_above] );
+    plot_one_feature(114,FLAG_SHOW_3D, pc, pnts_proj,"h_{range}", [pc_feature.h_range] );
+    plot_one_feature(115,FLAG_SHOW_3D, pc, pnts_proj,"h_{below}", [pc_feature.h_below] );
+    
+
 end
 
 %% FURther process on features
