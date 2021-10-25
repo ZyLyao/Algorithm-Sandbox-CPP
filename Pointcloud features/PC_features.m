@@ -50,26 +50,28 @@ if FLAG_DEBUG
 %     hold off
 end
 %% K-R or KNN local features
-method = 1; %% 0:K-R 1:KNN
-num_nn = 100; % in case of KNN, number of neighbors
+method = 0; %% 0:K-R 1:KNN
+num_nn = 8; % in case of KNN, number of neighbors
 radius = 1; %in case of KR, radius in meters 
 
-if method == 1
-    knn = knnsearch(pc.Location,pc.Location,'K',num_nn);
-elseif method == 0
-   %nothing 
+if method == 0
+    kr_indices = rangesearch(pc.Location,pc.Location,radius);% not confirmed working
+elseif method == 1
+    knn_indices = knnsearch(pc.Location,pc.Location,'K',num_nn);
 end
 
 pc_feature=struct;
 idx_keep = zeros(pc.Count,1);
 cnt = 0;
+tic
 for i = 1:pc.Count
     
     if(method == 0)
-        [indices,dists] = findNeighborsInRadius(pc,pc.Location(i,:),radius);
-        pc_local = pc.Location(indices,:);
+%         [indices,dists] = findNeighborsInRadius(pc,pc.Location(i,:),radius);
+%         pc_local = pc.Location(indices,:);
+        pc_local = pc.Location(kr_indices{i},:);
     elseif method == 1
-        pc_local = pc.Location(knn(i,:)',:);
+        pc_local = pc.Location(knn_indices(i,:)',:);
     end
     
     if(size(pc_local,1))>3
@@ -117,7 +119,7 @@ for i = 1:pc.Count
     end
     
 end
-
+toc
 %% Remove points with few nearby points
 idx_keep = idx_keep(find(idx_keep)~=0);
 pc = select(pc,idx_keep);
@@ -150,7 +152,7 @@ if FLAG_DEBUG
     plot_one_feature(113,FLAG_SHOW_3D, pc, pnts_proj,"h_{above}", [pc_feature.h_above] );
     plot_one_feature(114,FLAG_SHOW_3D, pc, pnts_proj,"h_{range}", [pc_feature.h_range] );
     plot_one_feature(115,FLAG_SHOW_3D, pc, pnts_proj,"h_{below}", [pc_feature.h_below] );
-    
+%     
 
 end
 
