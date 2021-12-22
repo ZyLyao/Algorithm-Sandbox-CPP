@@ -1,23 +1,23 @@
 clear
 
 FLAG_DEBUG = 1;
-FLAG_H_SEP = 0;
+FLAG_H_SEP = 1;
 FLAG_SHOW_3D = 1;
 %% geo-fence
-pc = pcread('dig_to_process(SHU).pcd');
+pc = pcread('combined_10.pcd');
 
 proj_pln = [0;0;1;30];
 Lidar_pos_P = [0;0;0];
 if FLAG_H_SEP
-    roi = [-15 20 -10 30 -inf 27];
+    roi = [-inf inf -inf inf -inf 15];
 else
-    roi = [-15 20 -10 30 -inf inf];
+    roi = [-inf inf -inf inf -inf inf];
 end
 
 indices = findPointsInROI(pc,roi);
 pc = select(pc,indices);
 tmp_pnts = pc.Location;
-tmp_pnts(:,3) = -tmp_pnts(:,3);
+% tmp_pnts(:,3) = -tmp_pnts(:,3); 
 pc = pointCloud(tmp_pnts);
 
 %% Voxel Downsample
@@ -51,13 +51,14 @@ if FLAG_DEBUG
 end
 %% K-R or KNN local features
 method = 0; %% 0:K-R 1:KNN
-num_nn = 8; % in case of KNN, number of neighbors
+num_nn = 10; % in case of KNN, number of neighbors
 radius = 1; %in case of KR, radius in meters 
 
+tree = KDTreeSearcher(pc.Location);
 if method == 0
-    kr_indices = rangesearch(pc.Location,pc.Location,radius);% not confirmed working
+    kr_indices = rangesearch(tree,pc.Location,radius);% not confirmed working
 elseif method == 1
-    knn_indices = knnsearch(pc.Location,pc.Location,'K',num_nn);
+    knn_indices = knnsearch(tree,pc.Location,'K',num_nn);
 end
 
 pc_feature=struct;
@@ -133,48 +134,75 @@ pnts_proj = PC_3dTo2d_traceback(pc.Location,Lidar_pos_P,proj_pln);
 
 %% Visualize local features
 if FLAG_DEBUG
-%     plot_one_feature(100,FLAG_SHOW_3D, pc, pnts_proj,"sum", [pc_feature.sum] );
-%     plot_one_feature(101,FLAG_SHOW_3D, pc, pnts_proj,"omnivarriance", [pc_feature.omnivarriance] );
-%     plot_one_feature(102,FLAG_SHOW_3D, pc, pnts_proj,"eigenentropy", [pc_feature.eigenentropy] );
-%     plot_one_feature(103,FLAG_SHOW_3D, pc, pnts_proj,"anisotropy", [pc_feature.anisotropy] );
-%     
-%     plot_one_feature(104,FLAG_SHOW_3D, pc, pnts_proj,"planarity", [pc_feature.planarity] );
-%     plot_one_feature(105,FLAG_SHOW_3D, pc, pnts_proj,"linearity", [pc_feature.linearity] );
-%     plot_one_feature(106,FLAG_SHOW_3D, pc, pnts_proj,"curvature", [pc_feature.curvature] );
-%     plot_one_feature(107,FLAG_SHOW_3D, pc, pnts_proj,"sphericity", [pc_feature.sphericity] );
-%     plot_one_feature(108,FLAG_SHOW_3D, pc, pnts_proj,"verticality", [pc_feature.verticality] );
-%     
-%     plot_one_feature(109,FLAG_SHOW_3D, pc, pnts_proj,"o1a1", [pc_feature.o1a1] );
-%     plot_one_feature(110,FLAG_SHOW_3D, pc, pnts_proj,"o1a2", [pc_feature.o1a2] );
-%     plot_one_feature(111,FLAG_SHOW_3D, pc, pnts_proj,"o2a1", [pc_feature.o2a1] );
-%     plot_one_feature(112,FLAG_SHOW_3D, pc, pnts_proj,"o2a2", [pc_feature.o2a2] );
+    plot_one_feature_ESS(100,FLAG_SHOW_3D, pc, pnts_proj,"sum", [pc_feature.sum] );
+    plot_one_feature_ESS(101,FLAG_SHOW_3D, pc, pnts_proj,"omnivarriance", [pc_feature.omnivarriance] );
+    plot_one_feature_ESS(102,FLAG_SHOW_3D, pc, pnts_proj,"eigenentropy", [pc_feature.eigenentropy] );
+    plot_one_feature_ESS(103,FLAG_SHOW_3D, pc, pnts_proj,"anisotropy", [pc_feature.anisotropy] );
+    
+    plot_one_feature_ESS(104,FLAG_SHOW_3D, pc, pnts_proj,"planarity", [pc_feature.planarity] );
+    plot_one_feature_ESS(105,FLAG_SHOW_3D, pc, pnts_proj,"linearity", [pc_feature.linearity] );
+    plot_one_feature_ESS(106,FLAG_SHOW_3D, pc, pnts_proj,"curvature", [pc_feature.curvature] );
+    plot_one_feature_ESS(107,FLAG_SHOW_3D, pc, pnts_proj,"sphericity", [pc_feature.sphericity] );
+    plot_one_feature_ESS(108,FLAG_SHOW_3D, pc, pnts_proj,"verticality", [pc_feature.verticality] );
+    
+    plot_one_feature_ESS(109,FLAG_SHOW_3D, pc, pnts_proj,"o1a1", [pc_feature.o1a1] );
+    plot_one_feature_ESS(110,FLAG_SHOW_3D, pc, pnts_proj,"o1a2", [pc_feature.o1a2] );
+    plot_one_feature_ESS(111,FLAG_SHOW_3D, pc, pnts_proj,"o2a1", [pc_feature.o2a1] );
+    plot_one_feature_ESS(112,FLAG_SHOW_3D, pc, pnts_proj,"o2a2", [pc_feature.o2a2] );
 
-    plot_one_feature(113,FLAG_SHOW_3D, pc, pnts_proj,"h_{above}", [pc_feature.h_above] );
-    plot_one_feature(114,FLAG_SHOW_3D, pc, pnts_proj,"h_{range}", [pc_feature.h_range] );
-    plot_one_feature(115,FLAG_SHOW_3D, pc, pnts_proj,"h_{below}", [pc_feature.h_below] );
+    plot_one_feature_ESS(113,FLAG_SHOW_3D, pc, pnts_proj,"h_{above}", [pc_feature.h_above] );
+    plot_one_feature_ESS(114,FLAG_SHOW_3D, pc, pnts_proj,"h_{range}", [pc_feature.h_range] );
+    plot_one_feature_ESS(115,FLAG_SHOW_3D, pc, pnts_proj,"h_{below}", [pc_feature.h_below] );
 %     
 
 end
 
-%% FURther process on features
+%% Refine the map 
 D2R = pi/180;
-thres_v_ang_d = 7.5; % degrees
+thres_v_ang_d = 10; % degrees
 thres_v_ang_r = thres_v_ang_d * D2R;
 
 thres_verticality = cos(thres_v_ang_r);
 linearity = [pc_feature.linearity];
 planarity = [pc_feature.planarity];
 verticality = [pc_feature.verticality];
-idx = find(verticality>thres_verticality);
-pc_sel = select(pc,idx);
+curvature = [pc_feature.curvature];
+% find points with large verticality
+idx_v = find(verticality>thres_verticality); 
+% find points with small verticality
+idx_h = find(verticality< 1 - thres_verticality);
+idx_pln = find(planarity > 0.86);
+idx_upper = find(pc.Location(:,3)>h_med_margin);
+idx_lower = find(pc.Location(:,3)<h_med_margin);
+idx_edge = find(linearity > 0.5);
+idx_curv = find(curvature > 0.1);
 
-% figure(200)
-% subplot(1,2,1)
-% pcshow(pc)
-% subplot(1,2,2)
-% pcshow(pc_sel)
+pc_h = select(pc,idx_h);
+% Find a proper height for separating deck points and others
+h_med = median(pc_h.Location(:,3));
+h_med_margin = h_med - 2; % set a 2 meters margin
+
+
+pc_v = select(pc,idx_v);
+pc_h_high = select(pc, intersect(idx_h,idx_upper));
+pc_edge = select(pc, intersect(idx_edge,idx_curv));
+
+figure(200)
+scatter3(pc_v.Location(:,1),pc_v.Location(:,2),pc_v.Location(:,3),'.r')
+hold on 
+scatter3(pc_h_high.Location(:,1),pc_h_high.Location(:,2),pc_h_high.Location(:,3),'.b')
+scatter3(pc_edge.Location(:,1),pc_edge.Location(:,2),pc_edge.Location(:,3),'.g')
+hold off
+axis equal
+xlabel('x, m')
+ylabel('y, m')
+zlabel('z, m')
+title('refine map with verticality')
+legend({'vertical','hort & planar & high','edge'})
+
 % 
 % figure(201)
 % idx = find(linearity>0.5);
 % pc_sel = select(pc,idx);
 % pcshow(pc_sel)
+
